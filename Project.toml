@@ -1,0 +1,13 @@
+name = "UTCDates"
+uuid = "b98ef39d-f70c-4876-8718-5d113581b365"
+version = "0.1.0"
+authors = ["Tucker McClure <tucker@gradient.team>"]
+
+[workspace]
+projects = ["test"]
+
+[deps]
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+Printf = "1.11.0"
