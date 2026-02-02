@@ -5,6 +5,8 @@ import Dates
 const unix_epoch = UTCDate(1970, 01, 01, 0, 0, 0)
 const gps_epoch  = UTCDate(1980, 01, 06, 0, 0, 0)
 
+# TODO: Test for type stability and allocations.
+
 @testset "known times between dates" begin
 
     gps_wrt_unix = elapsed(; from = unix_epoch, to = gps_epoch)

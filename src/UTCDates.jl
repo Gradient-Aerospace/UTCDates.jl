@@ -162,21 +162,26 @@ function seconds_in_day(year, month, day; leap_second_table = default_leap_secon
     return seconds_in_normal_day
 end
 
-# TODO: Redo this much more efficiently.
+"""
+Returns true if the given year is a leap year.
+"""
+function is_leap_year(year)
+    return mod(year, 400) == 0 || (mod(year, 4) == 0 && mod(year, 100) != 0)
+end
+
+"""
+Returns the number of days (revolutions) in the given year.
+"""
+function days_in_year(year)
+    return is_leap_year(year) ? 366 : 365
+end
+
 """
 Returns the fractional number of SI seconds of elapsed time from one UTCDate to another.
 The elapsed time to future dates is only known 6 months in advance. Beyond that, the value
 returned from this function should be considered a projection.
-
-Note that this is an inefficient implementation. It's intended to be simple to read and
-reason about, and it's not intended for applications that require speed.
 """
 function elapsed(; from::UTCDate, to::UTCDate, leap_second_table::LeapSecondTable = default_leap_second_table)
-
-    elapsed_time = 0.
-    year  = from.year
-    month = from.month
-    day   = from.day
 
     # If the "to" is before the "from", do it backwards and return the opposite sign.
     if to < from
@@ -188,35 +193,96 @@ function elapsed(; from::UTCDate, to::UTCDate, leap_second_table::LeapSecondTabl
 
     # We can now assume the "to" date is after or equal to the "from" date.
 
-    # TODO: Get the number of days between the two midnights. Get the nominal number of
-    # seconds in those days. Add on the number of leap seconds between those two days.
+    # There are alternatives to the below implementation, such as by finding the Julian
+    # day of 00:00 of each date, adding on leap seconds, etc. However, that's much harder
+    # to read, loses a lot of precision compared to the below, and isn't actually much
+    # faster. We stick with this plain implementation of mostly integer math.
 
-    # Add up all of the days between the two dates until it's the same day.
-    while year < to.year || month < to.month || day < to.day
+    # Get the number of days between the two midnights.
+    whole_days = 0
+    if from.year < to.year # If we count all the way to the year's end...
 
-        # We need to add a day.
-        elapsed_time += seconds_in_day(year, month, day; leap_second_table)
+        # Count up the days in the whole years between the two.
+        for year in from.year + 1 : to.year - 1
+            whole_days += days_in_year(year)
+        end
 
-        # Figure out how the calendar moves forward.
-        if day + 1 <= days_in_month(year, month)
-            day += 1
-        else
-            day = 1
-            if month + 1 <= 12
-                month += 1
-            else
-                month = 1
-                year += 1
+        # Count up days for the months leading up to the end of the year.
+        for month in from.month + 1 : 12
+            whole_days += days_in_month(from.year, month)
+        end
+
+        # Count up days from the beginning of the year to the given month.
+        for month in 1 : to.month - 1
+            whole_days += days_in_month(to.year, month)
+        end
+
+        # Count days from 00:00 of "from" to the end of the month.
+        whole_days += (days_in_month(from.year, from.month) - from.day + 1)
+
+        # Count days from beginning of "to" month to 00:00 of to.day.
+        whole_days += to.day - 1
+
+    else # Otherwise, they're the same year.
+
+        if from.month < to.month # If we count to the month's end...
+
+            # Count up days for the whole months between the two.
+            for month in from.month + 1 : to.month - 1
+                whole_days += days_in_month(from.year, month)
             end
+
+            # Count to the end of the "from" month.
+            whole_days += days_in_month(from.year, from.month) - from.day + 1
+
+            # Count from the beginning of the "to" month.
+            whole_days += to.day - 1
+
+        else # Same month
+
+            whole_days = to.day - from.day
+
         end
 
     end
 
-    # That takes care of the elapsed time for the days between the dates. Now let's just
-    # figure out the time since the start of the day for each date and add the difference.
-    elapsed_time += seconds_since_midnight(to) - seconds_since_midnight(from)
+    # Get the number of leap seconds between those two dates. We'll start from the beginning
+    # of the table and search until the entry is beyond the "to" date.
+    leap_seconds = 0
+    for entry in leap_second_table.table
 
-    return elapsed_time
+        # If this entry comes after the "to" date, break out. Note the final ">="; we're
+        # counting to 00:00 of the "to" date, and leap seconds come at the end of the day.
+        if (
+            entry.year > to.year ||
+            (entry.year == to.year && entry.month > to.month) ||
+            (entry.year == to.year && entry.month == to.month && entry.day >= to.day)
+        )
+            break
+        end
+
+        # We know the entry is before the "to" date. If it's after 00:00 of the "from" date,
+        # then we count it.
+        if (
+            entry.year > from.year ||
+            (entry.year == from.year && entry.month > from.month) ||
+            (entry.year == from.year && entry.month == from.month && entry.day >= from.day)
+        )
+            leap_seconds += entry.leap
+        end
+
+    end
+
+    # The elapsed time is the nominal number of seconds in a day times the number of whole
+    # days between 00:00 on each date, plus the leap seconds that have been added, plus how
+    # far the "to" date is into its day, minus the leap seconds that came before the time
+    # of day for "from" (because we've account for time since midnight).
+    return (
+        whole_days * seconds_in_normal_day
+        + leap_seconds
+        - seconds_since_midnight(from)
+        + seconds_since_midnight(to)
+    )
 
 end
 
