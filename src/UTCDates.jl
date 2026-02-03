@@ -68,6 +68,8 @@ const default_leap_second_table = LeapSecondTable(;
     ],
     valid_through = (2026, 06, 30),
 )
+# TODO: We could construct the intervals between these epochs upon construction fo the
+# table. This would make the `after` function faster.
 
 """
 A type for storing UTC date and time, with fields for `year`, `month`, `day`, `hour`,
@@ -146,20 +148,6 @@ date.
 """
 function seconds_since_midnight(d::UTCDate)
     return d.hour * 60 * 60 + d.minute * 60 + d.seconds
-end
-
-# TODO: Remove this.
-"""
-Returns the number of SI seconds in the given day, given the year, month, and day plus the
-(optional) leap second table.
-"""
-function seconds_in_day(year, month, day; leap_second_table = default_leap_second_table)
-    for lse in leap_second_table.table
-        if lse.year == year && lse.month == month && lse.day == day
-            return seconds_in_normal_day + lse.leap
-        end
-    end
-    return seconds_in_normal_day
 end
 
 """
@@ -298,226 +286,6 @@ function seconds_to_hms(seconds)
     return (hours, minutes, seconds)
 end
 
-function seconds_in_month(year, month; leap_second_table)
-
-    # Now count to the end of the month.
-    seconds = days_in_month(year, month) * seconds_in_normal_day
-
-    # And if there's a leap second at the end of the month, add it on.
-    if month == 6 || month == 12 # Only valid months for leap seconds
-        for entry in leap_second_table.table
-            if entry.year == year && entry.month == month
-                seconds += entry.leap
-                break
-            end
-        end
-    end
-
-    return seconds
-
-end
-
-function seconds_in_year(year; leap_second_table)
-
-    # Now count to the end of the month.
-    seconds = days_in_year(year) * seconds_in_normal_day
-
-    # And if there's a leap second in this year, add it on.
-    for entry in leap_second_table.table
-        if entry.year == year
-            seconds += entry.leap
-        elseif entry.year > year
-            break
-        end
-    end
-
-    return seconds
-
-end
-
-"""
-Returns the UTCDate after the given amount of time (SI seconds) from the given UTCDate.
-"""
-function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable = default_leap_second_table)
-
-    # First, turn hours, seconds, and minutes into more elapsed time, then we'll just
-    # deal with what comes after midnight.
-    elapsed_time += seconds_since_midnight(start)
-
-    year  = start.year
-    month = start.month
-    day   = start.day
-
-    if iszero(elapsed_time)
-
-        return UTCDate(year, month, day, 0, 0, 0.)
-
-    elseif elapsed_time > 0
-
-        return after2(UTCDate(year, month, day, 0, 0, 0.), elapsed_time; leap_second_table)
-
-        # # Count to the end of the day.
-        # # TODO: Keep an index into the leap_second_table to make this more efficient.
-        # seconds_left_in_day = seconds_in_day(year, month, day; leap_second_table)
-
-        # # If we need to keep going past the end of the day...
-        # count = 0
-        # if seconds_left_in_day <= elapsed_time
-
-        #     # Now count to the end of the month from the end of the day.
-        #     if day == days_in_month(year, month)
-        #         seconds_left_in_month = 0
-        #     else
-        #         seconds_left_in_month = seconds_in_month(year, month; leap_second_table) - day * seconds_in_normal_day
-        #     end
-
-        #     # If we need to keep going past the end of the month...
-        #     if (seconds_left_in_day + seconds_left_in_month) <= elapsed_time
-
-        #         # Figure out how many seconds remain in the year, after this month.
-        #         seconds_left_in_year = 0
-        #         for this_month = month + 1 : 12
-        #             seconds_left_in_year += seconds_in_month(year, this_month; leap_second_table)
-        #         end
-
-        #         # If we need to keep going past the end of the year...
-        #         if (seconds_left_in_day + seconds_left_in_month + seconds_left_in_year) <= elapsed_time
-
-        #             # Just keep adding up years.
-        #             count = seconds_left_in_day + seconds_left_in_month + seconds_left_in_year
-        #             year += 1
-        #             month = 1
-        #             day = 1
-        #             while true
-        #                 siy = seconds_in_year(year; leap_second_table)
-        #                 if count + siy > elapsed_time
-        #                     break
-        #                 else
-        #                     count += siy
-        #                     year += 1
-        #                 end
-        #             end
-
-        #         else
-
-        #             # It's past the end of the month, but not past the end of the year. Go to
-        #             # the next month.
-        #             count = seconds_left_in_day + seconds_left_in_month
-        #             month += 1
-        #             if month == 13
-        #                 error("month 13?")
-        #             end
-        #             day = 1
-
-        #         end
-
-        #         # We know what year it's in. Now count the months.
-        #         while true
-        #             sim = seconds_in_month(year, month; leap_second_table)
-        #             if count + sim > elapsed_time
-        #                 break
-        #             else
-        #                 count += sim
-        #                 month += 1 # Note: This should never trip a year changeover!
-        #                 if month == 13
-        #                     error("month 13 again?")
-        #                 end
-        #                 day = 1
-        #             end
-        #         end
-
-        #     else
-
-        #         # It's past the end of today but not past the end of this month. Go to the next
-        #         # day.
-        #         count = seconds_left_in_day
-        #         day += 1
-
-        #     end
-
-        #     # We know what year and month it's in. Now count the days.
-        #     while true
-        #         sid = seconds_in_day(year, month, day)
-        #         if count + sid > elapsed_time
-        #             break
-        #         else
-        #             count += sid
-        #             day += 1 # Note: This should never trip a month/year changeover!
-        #         end
-        #     end
-
-        # else
-
-        #     # It's still in the same day we started with.
-        #     count = 0
-
-        # end
-
-        # # Now add on the seconds.
-        # return UTCDate(year, month, day, seconds_to_hms(elapsed_time - count)...)
-
-    else # elapsed_time < 0
-
-        # It's the beginning of the day.
-
-        # Our goal here is to find a date that's just before the date we seek, and then
-        # count forward using the elapsed_time > 0 code block.
-
-        # Count back to the beginning of the month. Since we're counting from the beginning
-        # of the day somewhere inside of a month, we won't bump into any leap seconds.
-        count = 0
-        while day != 1
-
-            # Go back a day.
-            count -= seconds_in_normal_day
-            day -= 1
-
-            # If we've gone back far enough...
-            if count < elapsed_time
-                return UTCDate(year, month, day, seconds_to_hms(elapsed_time - count)...)
-            end
-
-        end
-
-        # Now it's the beginning of the month. Try going back to the beginning of the year.
-        while month != 1
-
-            # Go back a month.
-            # TODO: Keep an index into the leap_second_table to make this more efficient.
-            month -= 1
-            count -= seconds_in_month(year, month; leap_second_table)
-
-            # If we've gone back far enough...
-            if count < elapsed_time
-
-                # We have the right year and month. We need to get the right day.
-                seconds_from_start_of_month = elapsed_time - count
-                day = floor(seconds_from_start_of_month / seconds_in_normal_day) + 1
-                if day > days_in_month(year, month)
-                    day -= 1
-                end
-                seconds_into_day = seconds_from_start_of_month - (day-1) * seconds_in_normal_day
-                return UTCDate(year, month, day, seconds_to_hms(seconds_into_day)...)
-
-            end
-
-        end
-
-        # Now it's the beginning of the year. See how many years we can go back.
-        while count > elapsed_time
-            year -= 1
-            # TODO: Keep an index into the leap_second_table to make this more efficient.
-            count -= seconds_in_year(year; leap_second_table)
-        end
-
-        # We've now gone far enough back in time that count < elapsed_time, and we need to
-        # move forward.
-        after(UTCDate(year, month, day, 0, 0, 0.), elapsed_time - count)
-
-    end
-
-end
-
 struct YMD
     year::Int64
     month::Int64
@@ -539,7 +307,10 @@ function Base.:<(a::YMD, b::YMD)
     return a.day < b.day
 end
 
-function after2(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable = default_leap_second_table)
+"""
+Returns the UTCDate after the given amount of time (SI seconds) from the given UTCDate.
+"""
+function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable = default_leap_second_table)
 
     # First, move the start to the beginning of the day.
     elapsed_time += seconds_since_midnight(start)
@@ -547,46 +318,135 @@ function after2(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable
     month = start.month
     day = start.day
 
-    # Calculate the interval from year, month, day to the next leap second. If we're going
-    # further, accept the date of the leap second, subtract the interval from elapsed_time,
-    # and loop. We'll complete this until we aren't going further than the next leap second
-    # (or there is no next leap second).
-    for entry in leap_second_table.table
+    if iszero(elapsed_time)
 
-        # If the entry is in the future...
-        if YMD(entry.year, entry.month, entry.day) >= YMD(year, month, day)
+        return UTCDate(year, month, day, 0, 0, 0.)
 
-            # See how long it is until that day.
-            # TODO: We know there are no leap seconds, so we could use a more efficient calculation here.
-            time_until_day_of_next_leap = UTCDate(entry.year, entry.month, entry.day) - UTCDate(year, month, day)
+    elseif elapsed_time > 0
 
-            # If we're going past that, then update the day to that day.
-            if time_until_day_of_next_leap < elapsed_time
+        # Calculate the interval from year, month, day to the next leap second. If we're going
+        # further, accept the date of the leap second, subtract the interval from elapsed_time,
+        # and loop. We'll complete this until we aren't going further than the next leap second
+        # (or there is no next leap second).
+        for entry in leap_second_table.table
 
-                # This puts us at the beginning of the day with the leap second.
+            # If the entry is in the future...
+            if YMD(entry.year, entry.month, entry.day) >= YMD(year, month, day)
+
+                # See how long it is until that day.
+                # TODO: We know there are no leap seconds, so we could use a more efficient calculation here.
+                time_until_day_of_next_leap = (
+                    UTCDate(entry.year, entry.month, entry.day) - UTCDate(year, month, day)
+                )
+
+                # If we're going past that, then update the day to that day.
+                if time_until_day_of_next_leap < elapsed_time
+
+                    # This puts us at the beginning of the day with the leap second.
+                    year = entry.year
+                    month = entry.month
+                    day = entry.day
+                    elapsed_time -= time_until_day_of_next_leap
+
+                    # Are we going past the leap second?
+                    length_of_day = seconds_in_normal_day + entry.leap
+                    if length_of_day <= elapsed_time
+
+                        day = 1 # Leap seconds occur at the end of the month.
+                        month += 1
+                        if month == 13
+                            year += 1
+                            month = 1
+                        end
+                        elapsed_time -= length_of_day
+
+                    else
+
+                        # If not going past the leap second, then we already have the
+                        # solution.
+                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+
+                    end
+
+                else
+
+                    break
+
+                end
+
+            end
+
+        end
+
+    else # elapsed_time < 0
+
+        # Our strategy here is to find a date that's definitely before the date we seek and
+        # then use the forward logic. We'll start at the most recent leap second and keep
+        # moving backwards to find a leap second that's farther back in time from what we're
+        # seeking.
+        for entry in reverse(leap_second_table.table)
+
+            # If the leap second is before the year, month, and day...
+            if YMD(entry.year, entry.month, entry.day) < YMD(year, month, day)
+
+                # See how far back the beginning of that day is.
+                time_since_this_leap_second = (
+                    UTCDate(year, month, day) - UTCDate(entry.year, entry.month, entry.day)
+                )
+
+                # Accept that date.
                 year = entry.year
                 month = entry.month
                 day = entry.day
-                elapsed_time -= time_until_day_of_next_leap
+                elapsed_time += time_since_this_leap_second
 
-                # Are we going past the leap second?
-                length_of_day = seconds_in_normal_day + entry.leap
-                if length_of_day <= elapsed_time
-                    day = 1 # Leap seconds occur at the end of the month.
-                    month += 1
-                    if month == 13
-                        year += 1
-                        month = 1
+                # When we've backed up enough, break out of this loop and rely on the
+                # "forward" logic.
+                if elapsed_time > 0
+
+                    # Ok, now we're going forward.
+
+                    # Are we going past the leap second?
+                    length_of_day = seconds_in_normal_day + entry.leap
+                    if length_of_day <= elapsed_time
+
+                        day = 1 # Leap seconds occur at the end of the month.
+                        month += 1
+                        if month == 13
+                            year += 1
+                            month = 1
+                        end
+                        elapsed_time -= length_of_day
+
+                    else
+
+                        # If not going past the leap second, then we already have the
+                        # solution.
+                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+
                     end
-                    elapsed_time -= length_of_day
-                else
-                    return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+
+                    break
+
                 end
 
-            else
+            end
 
-                break
+        end
 
+        if elapsed_time < 0
+
+            # If we got here, it means there are no more leap seconds before year, month,
+            # day. So, let's just go to the beginning of time (as far as this package is
+            # concerned).
+            time_since_1 = UTCDate(year, month, day) - UTCDate(1, 1, 1)
+            elapsed_time += time_since_1
+            year = 1
+            month = 1
+            day = 1
+
+            if elapsed_time < 0
+                error("UTCDates does not have logic to deal with years prior to year 1.")
             end
 
         end
@@ -673,17 +533,11 @@ function Base.isequal(a::UTCDate, b::UTCDate)
 end
 
 """
-Returns true iff the given UTCDates are approximately equal.
+Returns true iff the given UTCDates are approximately equal by comparing the amount of time
+between them to 0.
 """
 function Base.isapprox(a::UTCDate, b::UTCDate; kwargs...)
-    return (
-        a.year    == b.year &&
-        a.month   == b.month &&
-        a.day     == b.day &&
-        a.hour    == b.hour &&
-        a.minute  == b.minute &&
-        isapprox(a.seconds, b.seconds; kwargs...)
-    )
+    return isapprox(abs(a - b), 0.; kwargs...)
 end
 
 """
@@ -853,6 +707,20 @@ end
 
 #     return jd
 
+# end
+
+# # Remove this if we remove the JD stuff.
+# """
+# Returns the number of SI seconds in the given day, given the year, month, and day plus the
+# (optional) leap second table.
+# """
+# function seconds_in_day(year, month, day; leap_second_table = default_leap_second_table)
+#     for lse in leap_second_table.table
+#         if lse.year == year && lse.month == month && lse.day == day
+#             return seconds_in_normal_day + lse.leap
+#         end
+#     end
+#     return seconds_in_normal_day
 # end
 
 end # module UTCDates

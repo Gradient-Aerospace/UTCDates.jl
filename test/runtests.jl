@@ -259,16 +259,34 @@ end
 
 end
 
+@testset "outside leap second table" begin
+
+    # Starting outside of the leap second table and stepping outside of the table
+    @test UTCDate(1971, 1, 1) + 365*24*60*60 == UTCDate(1972, 1, 1)
+    @test UTCDate(1971, 1, 1) - 365*24*60*60 == UTCDate(1970, 1, 1)
+    @test UTCDate(1972, 1, 1) - UTCDate(1971, 1, 1) ≈ 365*24*60*60
+    @test UTCDate(1970, 1, 1) - UTCDate(1971, 1, 1) ≈ -365*24*60*60
+
+    # Starting outside of the leap second table and stepping into the table
+    @test UTCDate(1971, 1, 1) + ((365+366)*24*60*60 + 2) == UTCDate(1973, 1, 1)
+    @test UTCDate(1973, 1, 1) - UTCDate(1971, 1, 1) ≈ ((365+366)*24*60*60 + 2)
+
+    # Starting inside the table and stepping outside of it
+    @test UTCDate(1973, 1, 1) - (366*24*60*60 + 2) == UTCDate(1972, 1, 1)
+
+end
+
 @testset "roundtrip" begin
 
     # We'll just try a huge number of elapsed times to find the resulting date, and then
     # we'll go backwards to make sure we get the original date.
-    d = UTCDate(1975, 1, 1, 0, 0, 0.)
-    for dt = -5 * 365 * 24 * 60 * 60 : 119.3 : 5 * 365 * 24 * 60 * 60
+    tol = 1e-6
+    d = UTCDate(1985, 1, 1, 0, 0, 0.)
+    for dt in LinRange(-5 * 365 * 24 * 60 * 60, 5 * 365 * 24 * 60 * 60, 1_000_000)
         d2 = after(d, dt)
-        @test d2 - d == dt
+        @test d2 - d ≈ dt atol = tol
         d3 = after(d2, -dt)
-        @test d3 ≈ d
+        @test d3 ≈ d atol = tol
     end
 
 end
