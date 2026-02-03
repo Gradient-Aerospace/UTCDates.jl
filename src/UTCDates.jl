@@ -354,105 +354,107 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
     elseif elapsed_time > 0
 
-        # Count to the end of the day.
-        # TODO: Keep an index into the leap_second_table to make this more efficient.
-        seconds_left_in_day = seconds_in_day(year, month, day; leap_second_table)
+        return after2(UTCDate(year, month, day, 0, 0, 0.), elapsed_time; leap_second_table)
 
-        # If we need to keep going past the end of the day...
-        count = 0
-        if seconds_left_in_day <= elapsed_time
+        # # Count to the end of the day.
+        # # TODO: Keep an index into the leap_second_table to make this more efficient.
+        # seconds_left_in_day = seconds_in_day(year, month, day; leap_second_table)
 
-            # Now count to the end of the month from the end of the day.
-            if day == days_in_month(year, month)
-                seconds_left_in_month = 0
-            else
-                seconds_left_in_month = seconds_in_month(year, month; leap_second_table) - day * seconds_in_normal_day
-            end
+        # # If we need to keep going past the end of the day...
+        # count = 0
+        # if seconds_left_in_day <= elapsed_time
 
-            # If we need to keep going past the end of the month...
-            if (seconds_left_in_day + seconds_left_in_month) <= elapsed_time
+        #     # Now count to the end of the month from the end of the day.
+        #     if day == days_in_month(year, month)
+        #         seconds_left_in_month = 0
+        #     else
+        #         seconds_left_in_month = seconds_in_month(year, month; leap_second_table) - day * seconds_in_normal_day
+        #     end
 
-                # Figure out how many seconds remain in the year, after this month.
-                seconds_left_in_year = 0
-                for this_month = month + 1 : 12
-                    seconds_left_in_year += seconds_in_month(year, this_month; leap_second_table)
-                end
+        #     # If we need to keep going past the end of the month...
+        #     if (seconds_left_in_day + seconds_left_in_month) <= elapsed_time
 
-                # If we need to keep going past the end of the year...
-                if (seconds_left_in_day + seconds_left_in_month + seconds_left_in_year) <= elapsed_time
+        #         # Figure out how many seconds remain in the year, after this month.
+        #         seconds_left_in_year = 0
+        #         for this_month = month + 1 : 12
+        #             seconds_left_in_year += seconds_in_month(year, this_month; leap_second_table)
+        #         end
 
-                    # Just keep adding up years.
-                    count = seconds_left_in_day + seconds_left_in_month + seconds_left_in_year
-                    year += 1
-                    month = 1
-                    day = 1
-                    while true
-                        siy = seconds_in_year(year; leap_second_table)
-                        if count + siy > elapsed_time
-                            break
-                        else
-                            count += siy
-                            year += 1
-                        end
-                    end
+        #         # If we need to keep going past the end of the year...
+        #         if (seconds_left_in_day + seconds_left_in_month + seconds_left_in_year) <= elapsed_time
 
-                else
+        #             # Just keep adding up years.
+        #             count = seconds_left_in_day + seconds_left_in_month + seconds_left_in_year
+        #             year += 1
+        #             month = 1
+        #             day = 1
+        #             while true
+        #                 siy = seconds_in_year(year; leap_second_table)
+        #                 if count + siy > elapsed_time
+        #                     break
+        #                 else
+        #                     count += siy
+        #                     year += 1
+        #                 end
+        #             end
 
-                    # It's past the end of the month, but not past the end of the year. Go to
-                    # the next month.
-                    count = seconds_left_in_day + seconds_left_in_month
-                    month += 1
-                    if month == 13
-                        error("month 13?")
-                    end
-                    day = 1
+        #         else
 
-                end
+        #             # It's past the end of the month, but not past the end of the year. Go to
+        #             # the next month.
+        #             count = seconds_left_in_day + seconds_left_in_month
+        #             month += 1
+        #             if month == 13
+        #                 error("month 13?")
+        #             end
+        #             day = 1
 
-                # We know what year it's in. Now count the months.
-                while true
-                    sim = seconds_in_month(year, month; leap_second_table)
-                    if count + sim > elapsed_time
-                        break
-                    else
-                        count += sim
-                        month += 1 # Note: This should never trip a year changeover!
-                        if month == 13
-                            error("month 13 again?")
-                        end
-                        day = 1
-                    end
-                end
+        #         end
 
-            else
+        #         # We know what year it's in. Now count the months.
+        #         while true
+        #             sim = seconds_in_month(year, month; leap_second_table)
+        #             if count + sim > elapsed_time
+        #                 break
+        #             else
+        #                 count += sim
+        #                 month += 1 # Note: This should never trip a year changeover!
+        #                 if month == 13
+        #                     error("month 13 again?")
+        #                 end
+        #                 day = 1
+        #             end
+        #         end
 
-                # It's past the end of today but not past the end of this month. Go to the next
-                # day.
-                count = seconds_left_in_day
-                day += 1
+        #     else
 
-            end
+        #         # It's past the end of today but not past the end of this month. Go to the next
+        #         # day.
+        #         count = seconds_left_in_day
+        #         day += 1
 
-            # We know what year and month it's in. Now count the days.
-            while true
-                sid = seconds_in_day(year, month, day)
-                if count + sid > elapsed_time
-                    break
-                else
-                    count += sid
-                    day += 1 # Note: This should never trip a month/year changeover!
-                end
-            end
+        #     end
 
-        else
+        #     # We know what year and month it's in. Now count the days.
+        #     while true
+        #         sid = seconds_in_day(year, month, day)
+        #         if count + sid > elapsed_time
+        #             break
+        #         else
+        #             count += sid
+        #             day += 1 # Note: This should never trip a month/year changeover!
+        #         end
+        #     end
 
-            # It's still in the same day we started with.
-            count = 0
+        # else
 
-        end
+        #     # It's still in the same day we started with.
+        #     count = 0
 
-        # Now add on the seconds.
-        return UTCDate(year, month, day, seconds_to_hms(elapsed_time - count)...)
+        # end
+
+        # # Now add on the seconds.
+        # return UTCDate(year, month, day, seconds_to_hms(elapsed_time - count)...)
 
     else # elapsed_time < 0
 
@@ -513,6 +515,146 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
         after(UTCDate(year, month, day, 0, 0, 0.), elapsed_time - count)
 
     end
+
+end
+
+struct YMD
+    year::Int64
+    month::Int64
+    day::Int64
+end
+function Base.:<(a::YMD, b::YMD)
+    if a.year < b.year
+        return true
+    elseif a.year > b.year
+        return false
+    end
+    # So the years are the same.
+    if a.month < b.month
+        return true
+    elseif a.month > b.month
+        return false
+    end
+    # So the months are the same.
+    return a.day < b.day
+end
+
+function after2(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable = default_leap_second_table)
+
+    # First, move the start to the beginning of the day.
+    elapsed_time += seconds_since_midnight(start)
+    year = start.year
+    month = start.month
+    day = start.day
+
+    # Calculate the interval from year, month, day to the next leap second. If we're going
+    # further, accept the date of the leap second, subtract the interval from elapsed_time,
+    # and loop. We'll complete this until we aren't going further than the next leap second
+    # (or there is no next leap second).
+    for entry in leap_second_table.table
+
+        # If the entry is in the future...
+        if YMD(entry.year, entry.month, entry.day) >= YMD(year, month, day)
+
+            # See how long it is until that day.
+            # TODO: We know there are no leap seconds, so we could use a more efficient calculation here.
+            time_until_day_of_next_leap = UTCDate(entry.year, entry.month, entry.day) - UTCDate(year, month, day)
+
+            # If we're going past that, then update the day to that day.
+            if time_until_day_of_next_leap < elapsed_time
+
+                # This puts us at the beginning of the day with the leap second.
+                year = entry.year
+                month = entry.month
+                day = entry.day
+                elapsed_time -= time_until_day_of_next_leap
+
+                # Are we going past the leap second?
+                length_of_day = seconds_in_normal_day + entry.leap
+                if length_of_day <= elapsed_time
+                    day = 1 # Leap seconds occur at the end of the month.
+                    month += 1
+                    if month == 13
+                        year += 1
+                        month = 1
+                    end
+                    elapsed_time -= length_of_day
+                else
+                    return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+                end
+
+            else
+
+                break
+
+            end
+
+        end
+
+    end
+
+    # There are no more leap seconds in the elapsed_time interval following the beginning of
+    # (year, month day). We can use simpler logic to find the updated date. We just need the
+    # number of whole days, where all days are the same length.
+    whole_days = floor(elapsed_time / seconds_in_normal_day)
+    time_of_day = mod(elapsed_time, seconds_in_normal_day)
+
+    # What year, month, and day is the given number of days in the future?
+
+    # While the goal remains more than a year in the future...
+    while true
+        if month <= 2 # In or before Feb., add *this* year's number of days to get the same day next year.
+            d = days_in_year(year)
+            if d <= whole_days
+                whole_days -= d
+                year += 1
+                if month == 2 && day == 29
+                    month = 3
+                    day = 1
+                else # Otherwise, the month and day are unchanged.
+                end
+            else
+                break
+            end
+        else # After Feb., use *next* year's number of days to get to the date next year.
+            d = days_in_year(year+1)
+            if d <= whole_days
+                whole_days -= d
+                year += 1 # Month and day stay the same.
+            else
+                break
+            end
+        end
+    end
+
+    # We now have less than a year to go. Check each month.
+    while true
+
+        # See if we move past the end of this month.
+        days_remaining_in_month = days_in_month(year, month) - day + 1
+        if days_remaining_in_month <= whole_days
+
+            # If so, discount the remaining days, and move the beginning of next month.
+            whole_days -= days_remaining_in_month
+            day = 1
+            month += 1
+            if month == 13
+                month = 1
+                year += 1
+            end
+
+        else
+
+            # Otherwise, we have the year and month, so the day of the month is just our
+            # current day plus whatever's left.
+            day += whole_days
+            break
+
+        end
+
+    end
+
+    return UTCDate(year, month, day, seconds_to_hms(time_of_day)...)
 
 end
 
