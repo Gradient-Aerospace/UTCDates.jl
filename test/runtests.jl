@@ -32,6 +32,68 @@ const gps_epoch  = UTCDate(1980, 01, 06, 0, 0, 0)
 
 end
 
+@testset "after different intervals" begin
+
+    # This is to make sure we hit all of the branches of after for both positive and
+    # negative elapsed intervals.
+
+    d = UTCDate(1981, 06, 30, 12, 0, 0.)
+
+    @test after(d, 1.25) == UTCDate(1981, 06, 30, 12, 0, 1.25)
+    @test after(d, 60.25) == UTCDate(1981, 06, 30, 12, 1, 0.25)
+    @test after(d, 600.25) == UTCDate(1981, 06, 30, 12, 10, 0.25)
+    @test after(d, 3600.25) == UTCDate(1981, 06, 30, 13, 0, 0.25)
+    @test after(d, 12*60*60 + 0.25) == UTCDate(1981, 06, 30, 23, 59, 60.25) # Leap second!
+    @test after(d, 24*60*60 + 0.25) == UTCDate(1981, 07, 1, 11, 59, 59.25)
+    @test after(d, 24*60*60 + 1.25) == UTCDate(1981, 07, 1, 12, 0, 0.25)
+    @test after(d, 365*24*60*60 + 1.25) == UTCDate(1982, 06, 30, 12, 0, 0.25)
+    @test after(d, (5*365+1)*24*60*60 + 4.25) == UTCDate(1986, 06, 30, 12, 0, 0.25) # Leap day and 4 leap seconds
+
+    @test after(UTCDate(1981, 06, 30, 12, 0, 1.25), -1.25) == d
+    @test after(UTCDate(1981, 06, 30, 12, 1, 0.25), -60.25) == d
+    @test after(UTCDate(1981, 06, 30, 12, 10, 0.25), -600.25) == d
+    @test after(UTCDate(1981, 06, 30, 13, 0, 0.25), -3600.25) == d
+    @test after(UTCDate(1981, 06, 30, 23, 59, 60.25), -(12*60*60 + 0.25)) == d # Leap second!
+    @test after(UTCDate(1981, 07, 1, 11, 59, 59.25), -(24*60*60 + 0.25)) == d
+    @test after(UTCDate(1981, 07, 1, 12, 0, 0.25), -(24*60*60 + 1.25)) == d
+    @test after(UTCDate(1982, 06, 30, 12, 0, 0.25), -(365*24*60*60 + 1.25)) == d
+    @test after(UTCDate(1986, 06, 30, 12, 0, 0.25), -((5*365+1)*24*60*60 + 4.25)) == d # Leap day and 4 leap seconds
+
+end
+
+@testset "stepping to edges of leap seconds" begin
+
+    d = UTCDate(2016, 12, 31, 23, 59, 0.)
+
+    # Step to the beginning of a leap second.
+    dt = 60.
+    @test after(d, dt) == UTCDate(2016, 12, 31, 23, 59, 60.)
+    @test after(d, dt) - d == dt
+
+    # Step to the middle of a leap second.
+    dt = 60.5
+    @test after(d, dt) == UTCDate(2016, 12, 31, 23, 59, 60.5)
+    @test after(d, dt) - d == dt
+
+    # Step to the end of a leap second.
+    dt = 61.
+    @test after(d, dt) == UTCDate(2017, 1, 1, 0, 0, 0.)
+    @test after(d, dt) - d == dt
+
+end
+
+@testset "type stability" begin
+
+    d1 = UTCDate(2016, 12, 31, 23, 59, 0.)
+    d2 = UTCDate(2017, 12, 31, 23, 59, 0.)
+
+    # Step to the beginning of a leap second.
+    @inferred after(d1, 600.)
+    @inferred after(d1, -600)
+    @inferred elapsed(; to = d2, from = d1)
+
+end
+
 @testset "comparison operators" begin
     @test unix_epoch <  gps_epoch
     @test unix_epoch <= gps_epoch
@@ -194,5 +256,19 @@ end
     # Test leap seconds.
     @test UTCDate(1989, 12, 31, 23, 59, 60.9) !== nothing
     @test_throws "There were not 60.9 seconds" UTCDate(1989, 12, 30, 23, 59, 60.9)
+
+end
+
+@testset "roundtrip" begin
+
+    # We'll just try a huge number of elapsed times to find the resulting date, and then
+    # we'll go backwards to make sure we get the original date.
+    d = UTCDate(1975, 1, 1, 0, 0, 0.)
+    for dt = -5 * 365 * 24 * 60 * 60 : 119.3 : 5 * 365 * 24 * 60 * 60
+        d2 = after(d, dt)
+        @test d2 - d == dt
+        d3 = after(d2, -dt)
+        @test d3 ≈ d
+    end
 
 end
