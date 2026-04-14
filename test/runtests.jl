@@ -7,6 +7,21 @@ const gps_epoch  = UTCDate(1980, 01, 06, 0, 0, 0)
 
 # TODO: Test for type stability and allocations.
 
+@testset "constructors" begin
+
+    # We're just looking for coverage here.
+    @test_throws "" UTCDate() # Too ambiguous.
+    @test_throws "" UTCDate(1970) # Too ambiguous.
+    @test_throws "" UTCDate(1970, 1) # Too ambiguous.
+    @test UTCDate(1970, 1, 1) isa UTCDate
+    @test_throws "" UTCDate(;) # Too ambiguous.
+    @test_throws "" UTCDate(; year = 1970) # Too ambiguous.
+    @test_throws "" UTCDate(; year = 1970, month = 1) # Too ambiguous.
+    @test_throws "" UTCDate(; month = 1, day = 2) # Too ambiguous.
+    @test UTCDate(; year = 1970, month = 1, day = 1) isa UTCDate
+
+end
+
 @testset "known times between dates" begin
 
     gps_wrt_unix = elapsed(; from = unix_epoch, to = gps_epoch)
