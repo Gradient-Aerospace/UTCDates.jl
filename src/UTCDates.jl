@@ -85,7 +85,7 @@ struct UTCDate
     seconds::Float64
 
     function UTCDate(
-        year::Number = 1970, month::Number = 1, day::Number = 1,
+        year::Number, month::Number, day::Number,
         hour::Number = 0, minute::Number = 0, seconds::Number = 0.;
         leap_second_table = default_leap_second_table,
     )
@@ -106,8 +106,16 @@ struct UTCDate
         return new(year, month, day, hour, minute, seconds)
     end
 
-    function UTCDate(s::AbstractString)
-        return convert(UTCDate, s)
+    function UTCDate(;
+        year::Number, month::Number, day::Number,
+        hour::Number = 0, minute::Number = 0, seconds::Number = 0.,
+        kwargs...,
+    )
+        return UTCDate(year, month, day, hour, minute, seconds; kwargs...)
+    end
+
+    function UTCDate(s::AbstractString; kwargs...)
+        return convert(UTCDate, s; kwargs...)
     end
 
 end
