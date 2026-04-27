@@ -2,19 +2,30 @@
 
 This package implements the `UTCDate` type and allows the calculation of the amount of elapsed time between two UTC dates in SI seconds.
 
+## Installation
+
+```julia
+using Pkg
+Pkg.add("UTCDates")
+```
+
 Here's an example of finding the elapsed time between two UTC dates:
 
-```
+```julia
+using UTCDates
+
 new_years_eve_morning = UTCDate(2016, 12, 31, 0, 0, 0.)
 new_years_day = UTCDate(2017, 1, 1, 0, 0, 0.)
 seconds_between_those_dates = new_years_day - new_years_eve_morning
 ```
 
-This returns 86,401s, and that is the correctly number of SI seconds between those two UTC dates. See below for more about where that extra 1 comes from.
+This returns 86,401s, and that is the correct number of SI seconds between those two UTC dates. See below for more about where that extra 1 comes from.
 
 Here's an example of finding the UTC date that happened a certain number of elapsed seconds after a given UTC date:
 
-```
+```julia
+using UTCDates
+
 gps_epoch = UTCDate(1980, 1, 6, 0, 0, 0.)
 number_of_elapsed_seconds = 1454038350. # I just got this from a GPS receiver.
 current_utc_date = gps_epoch + number_of_elapsed_seconds
@@ -22,9 +33,11 @@ current_utc_date = gps_epoch + number_of_elapsed_seconds
 
 This gives `UTCDate(2026, 2, 2, 3, 32, 12.0)`.
 
-When printing a `UTCDate` (or otherwise converting it to a string), the IS8601 format is used:
+When printing a `UTCDate` (or otherwise converting it to a string), the ISO 8601 format is used:
 
-```
+```julia
+using UTCDates
+
 string(UTCDate(2026, 2, 2, 3, 32, 12.0))
 ```
 
@@ -32,13 +45,27 @@ gives `"2026-02-02T03:32:12.000Z"`.
 
 The number of digits in the seconds can be controlled using the `iso8601` function directly:
 
-```
+```julia
+using UTCDates
+
 iso8601(UTCDate(2026, 2, 2, 3, 32, 12.0); digits = 0)
 ```
 
 gives `"2026-02-02T03:32:12Z"`.
 
-This package requires the use of a leap second table. That table is only accurate for six months in the future (in the worst case) because future leap seconds are simply not known in advance but rather come from the observations of the changing rotation rate of the earth. The table in this package will be updated when new leap seconds are announced, which is rare (every couple of years on average, but actually none in the last 10 years).
+This package requires the use of a leap second table. That table is only accurate for six months in the future (in the worst case) because future leap seconds are simply not known in advance but rather come from the observations of the changing rotation rate of the earth. The packaged table records the date through which it is valid, and this package will be updated when new leap seconds are announced. That is rare: historically every couple of years on average, and none since 2016.
+
+## API
+
+`UTCDate(year, month, day, hour = 0, minute = 0, seconds = 0.; leap_second_table = ...)` constructs a UTC date and validates that the requested minute exists.
+
+`UTCDate(str)` and `parse(UTCDate, str)` parse UTC ISO 8601 strings such as `"2016-12-31T23:59:60Z"`. Time zone offsets are not supported; the string must end in `Z`.
+
+`elapsed(; from, to, leap_second_table = ...)` returns the number of SI seconds from one `UTCDate` to another. `after(start, seconds; leap_second_table = ...)` returns the `UTCDate` that many SI seconds after `start`.
+
+The `+` and `-` operators use the packaged leap-second table. If you supply a custom table with `UTCDates.LeapSecondTable` and `UTCDates.LeapSecondEntry`, pass that same table explicitly to `UTCDate`, `elapsed`, and `after`.
+
+`iso8601(d; digits = 3)` formats a `UTCDate` as a UTC ISO 8601 string.
 
 ## Why Is This Package Useful?
 
@@ -54,7 +81,7 @@ Julia's built-in `DateTime` cannot be used to accurately calculate the elapsed t
 
 This package should not be confused with UTCDateTimes.jl, which is about time zones, not elapsed time. It, similarly, cannot be used to accurately calculate the elapsed time between two UTC dates.
 
-UTC is phasing out leap seconds. This has nothinng to do with the rotation of the earth, and nothing was "wrong" with UTC. Rather, so many civil time systems have chosen to track UTC, and subsequently been confused by calculations of elapsed time, that UTC is, itself, choosing to change. However, leap seconds may still be introduced until 2035, and if you need to calculate the elapsed time between two events prior to 2035, then you'll still need to perform that kinds of calculations represented here.
+UTC is phasing out leap seconds. This has nothing to do with the rotation of the earth, and nothing was "wrong" with UTC. Rather, so many civil time systems have chosen to track UTC, and subsequently been confused by calculations of elapsed time, that UTC is, itself, choosing to change. However, leap seconds may still be introduced until 2035, and if you need to calculate the elapsed time between two events prior to 2035, then you'll still need to perform the kinds of calculations represented here.
 
 ## TODOs
 

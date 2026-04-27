@@ -5,7 +5,7 @@ import Dates
 const unix_epoch = UTCDate(1970, 01, 01, 0, 0, 0)
 const gps_epoch  = UTCDate(1980, 01, 06, 0, 0, 0)
 
-# TODO: Test for type stability and allocations.
+# TODO: Test allocations.
 
 @testset "constructors" begin
 
@@ -194,6 +194,9 @@ end
     @test iso8601(UTCDate(2016, 12, 31, 23, 59, 59.123456789123); digits = 9) == "2016-12-31T23:59:59.123456789Z"
     @test iso8601(UTCDate(2016, 12, 31, 23, 59, 0); digits = 9) == "2016-12-31T23:59:00.000000000Z"
     @test iso8601(UTCDate(2016, 12, 31, 23, 59, 59.123456789123); digits = 0) == "2016-12-31T23:59:59Z"
+    @test sprint(io -> iso8601(io, UTCDate(2026, 2, 2, 3, 32, 12.0); digits = 0)) == "2026-02-02T03:32:12Z"
+    @test_throws "The number of digits" iso8601(gps_epoch; digits = -1)
+    @test_throws "not in a format UTCDates" UTCDate("xxx2024-07-22T21:46:00Zyyy")
 
 end
 
@@ -237,21 +240,54 @@ end
     )
 
     # Positive leap-second worked.
-    elapsed(;
+    @test elapsed(;
         from = UTCDate(2024, 07, 31, 00, 00, 0.; leap_second_table),
         to   = UTCDate(2024, 08, 01, 00, 00, 0.; leap_second_table),
+        leap_second_table,
     ) == 86401
+    @test after(
+        UTCDate(2024, 07, 31, 00, 00, 0.; leap_second_table),
+        86400;
+        leap_second_table,
+    ) == UTCDate(2024, 07, 31, 23, 59, 60.; leap_second_table)
+    @test after(
+        UTCDate(2024, 07, 31, 00, 00, 0.; leap_second_table),
+        86401;
+        leap_second_table,
+    ) == UTCDate(2024, 08, 01, 00, 00, 0.; leap_second_table)
+    @test UTCDate("2024-07-31T23:59:60Z"; leap_second_table) ==
+        UTCDate(2024, 07, 31, 23, 59, 60.; leap_second_table)
 
     # Negative leap-second worked.
-    elapsed(;
+    @test elapsed(;
         from = UTCDate(2024, 12, 31, 00, 00, 0.; leap_second_table),
         to   = UTCDate(2025, 01, 01, 00, 00, 0.; leap_second_table),
+        leap_second_table,
     ) == 86399
+    @test after(
+        UTCDate(2024, 12, 31, 00, 00, 0.; leap_second_table),
+        86398;
+        leap_second_table,
+    ) == UTCDate(2024, 12, 31, 23, 59, 58.; leap_second_table)
+    @test after(
+        UTCDate(2024, 12, 31, 00, 00, 0.; leap_second_table),
+        86399;
+        leap_second_table,
+    ) == UTCDate(2025, 01, 01, 00, 00, 0.; leap_second_table)
+    @test after(
+        UTCDate(2025, 01, 01, 00, 00, 0.; leap_second_table),
+        -1;
+        leap_second_table,
+    ) == UTCDate(2024, 12, 31, 23, 59, 58.; leap_second_table)
+    @test_throws "There were not 59.0 seconds" UTCDate(
+        2024, 12, 31, 23, 59, 59.; leap_second_table,
+    )
 
     # Where it's irrelevant, things are normal.
-    elapsed(;
+    @test elapsed(;
         from = UTCDate(1972, 12, 31, 00, 00, 0.; leap_second_table),
         to   = UTCDate(1973, 01, 01, 00, 00, 0.; leap_second_table),
+        leap_second_table,
     ) == 86400
 
 end
