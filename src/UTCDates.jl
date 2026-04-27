@@ -73,7 +73,7 @@ const default_leap_second_table = LeapSecondTable(;
 
 """
 A type for storing UTC date and time, with fields for `year`, `month`, `day`, `hour`,
-`minute`, and `second`.
+`minute`, and `seconds`.
 """
 struct UTCDate
 
@@ -89,18 +89,18 @@ struct UTCDate
         hour::Number = 0, minute::Number = 0, seconds::Number = 0.;
         leap_second_table = default_leap_second_table,
     )
-        @assert year >= 1 "Sorry, these UTCDates only work for years >= 1."
-        @assert month >= 1 && month <= 12 "Month $month is out of the expected range of [1, 12]."
-        @assert day >= 1 && day <= 31 "Day $day is out of the expected range of [1, 31]."
-        @assert hour >= 0 && hour <= 23 "Hour $hour is out of the expected range of [0, 23]."
-        @assert minute >= 0 && minute <= 59 "Minute $minute is out of the expected range of [0, 59]."
-        @assert seconds >= 0 && seconds < 61 "Seconds $seconds are out of the expected range of [0., 61.)."
+        year >= 1 || throw(ArgumentError("Sorry, these UTCDates only work for years >= 1."))
+        month >= 1 && month <= 12 || throw(ArgumentError("Month $month is out of the expected range of [1, 12]."))
+        day >= 1 && day <= 31 || throw(ArgumentError("Day $day is out of the expected range of [1, 31]."))
+        hour >= 0 && hour <= 23 || throw(ArgumentError("Hour $hour is out of the expected range of [0, 23]."))
+        minute >= 0 && minute <= 59 || throw(ArgumentError("Minute $minute is out of the expected range of [0, 59]."))
+        seconds >= 0 && seconds < 61 || throw(ArgumentError("Seconds $seconds are out of the expected range of [0., 61.)."))
         if day > days_in_month(year, month)
-            error("Day $day did not exist in month $month of $year.")
+            throw(ArgumentError("Day $day did not exist in month $month of $year."))
         end
         if leap_second_table !== nothing
             if seconds >= seconds_in_minute(year, month, day, hour, minute; leap_second_table)
-                error("There were not $seconds seconds in $year-$month-$day.")
+                throw(ArgumentError("There were not $seconds seconds in $year-$month-$day."))
             end
         end
         return new(year, month, day, hour, minute, seconds)
@@ -115,7 +115,7 @@ struct UTCDate
     end
 
     function UTCDate(s::AbstractString; kwargs...)
-        return convert(UTCDate, s; kwargs...)
+        return utc_date_from_string(s; kwargs...)
     end
 
 end
@@ -328,7 +328,7 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
     if iszero(elapsed_time)
 
-        return UTCDate(year, month, day, 0, 0, 0.)
+        return UTCDate(year, month, day, 0, 0, 0.; leap_second_table)
 
     elseif elapsed_time > 0
 
@@ -343,8 +343,10 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
                 # See how long it is until that day.
                 # TODO: We know there are no leap seconds, so we could use a more efficient calculation here.
-                time_until_day_of_next_leap = (
-                    UTCDate(entry.year, entry.month, entry.day) - UTCDate(year, month, day)
+                time_until_day_of_next_leap = elapsed(;
+                    from = UTCDate(year, month, day; leap_second_table),
+                    to   = UTCDate(entry.year, entry.month, entry.day; leap_second_table),
+                    leap_second_table,
                 )
 
                 # If we're going past that, then update the day to that day.
@@ -372,7 +374,7 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
                         # If not going past the leap second, then we already have the
                         # solution.
-                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...; leap_second_table)
 
                     end
 
@@ -398,8 +400,10 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
             if YMD(entry.year, entry.month, entry.day) < YMD(year, month, day)
 
                 # See how far back the beginning of that day is.
-                time_since_this_leap_second = (
-                    UTCDate(year, month, day) - UTCDate(entry.year, entry.month, entry.day)
+                time_since_this_leap_second = elapsed(;
+                    from = UTCDate(entry.year, entry.month, entry.day; leap_second_table),
+                    to   = UTCDate(year, month, day; leap_second_table),
+                    leap_second_table,
                 )
 
                 # Accept that date.
@@ -430,7 +434,7 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
                         # If not going past the leap second, then we already have the
                         # solution.
-                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...)
+                        return UTCDate(year, month, day, seconds_to_hms(elapsed_time)...; leap_second_table)
 
                     end
 
@@ -447,7 +451,11 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
             # If we got here, it means there are no more leap seconds before year, month,
             # day. So, let's just go to the beginning of time (as far as this package is
             # concerned).
-            time_since_1 = UTCDate(year, month, day) - UTCDate(1, 1, 1)
+            time_since_1 = elapsed(;
+                from = UTCDate(1, 1, 1; leap_second_table),
+                to   = UTCDate(year, month, day; leap_second_table),
+                leap_second_table,
+            )
             elapsed_time += time_since_1
             year = 1
             month = 1
@@ -522,7 +530,7 @@ function after(start::UTCDate, elapsed_time; leap_second_table::LeapSecondTable 
 
     end
 
-    return UTCDate(year, month, day, seconds_to_hms(time_of_day)...)
+    return UTCDate(year, month, day, seconds_to_hms(time_of_day)...; leap_second_table)
 
 end
 
@@ -625,8 +633,8 @@ If the `digits` keyword argument is provided, it floors the `seconds` to the spe
 of digits after the decimal place.
 """
 function iso8601(d::UTCDate; digits = 3)
+    digits >= 0 || throw(ArgumentError("The number of digits in the fraction of the second cannot be less than 0."))
     seconds = floor(d.seconds; digits)
-    @assert digits >= 0 "The number of digits in the fraction of the second cannot be less than 0."
     if digits == 0
         return format(
             Format("%04d-%02d-%02dT%02d:%02d:%02.0fZ"),
@@ -650,12 +658,7 @@ If the `digits` keyword argument is provided, it floors the `seconds` to the spe
 of digits after the decimal place.
 """
 function iso8601(io::IO, d::UTCDate; digits = 3)
-    seconds = floor(d.seconds; digits)
-    return format(
-        io,
-        Format("%04d-%02d-%02dT%02d:%02d:%0$(3 + digits).$(digits)fZ"),
-        d.year, d.month, d.day, d.hour, d.minute, seconds,
-    )
+    return print(io, iso8601(d; digits))
 end
 
 function Base.print(io::IO, d::UTCDate)
@@ -667,9 +670,11 @@ Creates a UTCDate from the given ISO 8601 string (YYYY-MM-DDThh:mm:ss.sssZ). The
 the time string are not necessary. The "Z" _is_ necessary, because this module does not have
 any logic for time zones, so we need to know that this is the UTC time zone.
 """
-function utc_date_from_string(str::AbstractString)
-    m = match(r"(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):?(\d\d):?(\d\d\.?\d*)Z", str)
-    @assert m !== nothing && length(m.captures) == 6 "$str is not in a format SimpleUTCDates knows how to parse (YYYY-MM-DDThh:mm:ss.sssZ)"
+function utc_date_from_string(str::AbstractString; kwargs...)
+    m = match(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):?(\d{2}):?(\d{2}(?:\.\d*)?)Z$", str)
+    if m === nothing || length(m.captures) != 6
+        throw(ArgumentError("$str is not in a format UTCDates knows how to parse (YYYY-MM-DDThh:mm:ss.sssZ)"))
+    end
     return UTCDate(
         parse(Int64,   m.captures[1]),
         parse(Int64,   m.captures[2]),
@@ -677,6 +682,7 @@ function utc_date_from_string(str::AbstractString)
         parse(Int64,   m.captures[4]),
         parse(Int64,   m.captures[5]),
         parse(Float64, m.captures[6]),
+        ; kwargs...
     )
 end
 
