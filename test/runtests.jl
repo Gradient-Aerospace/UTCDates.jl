@@ -1,6 +1,7 @@
 using Test
 using UTCDates
 import Dates
+import Dimensions
 
 const unix_epoch = UTCDate(1970, 01, 01, 0, 0, 0)
 const gps_epoch  = UTCDate(1980, 01, 06, 0, 0, 0)
@@ -339,5 +340,13 @@ end
         d3 = after(d2, -dt)
         @test d3 ≈ d atol = tol
     end
+
+end
+
+@testset "UTCDatesDimensionsExt" begin
+
+    # Test that the Dimensions extension added the right method.
+    @test Dimensions.dimstyle(UTCDate) == Dimensions.StructDimensionStyle()
+    @test Dimensions.numdims(UTCDate(2026, 1, 1)) == 6
 
 end

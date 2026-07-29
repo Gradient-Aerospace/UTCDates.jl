@@ -9,6 +9,13 @@ projects = ["test"]
 [deps]
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[weakdeps]
+Dimensions = "5f902022-033a-44bd-a904-0a49265d4d22"
+
+[extensions]
+UTCDatesDimensionsExt = "Dimensions"
+
 [compat]
 julia = "1.10"
+Dimensions = "0.1.0"
 Printf = "1"
