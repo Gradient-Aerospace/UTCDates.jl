@@ -1,6 +1,6 @@
 name = "UTCDates"
 uuid = "b98ef39d-f70c-4876-8718-5d113581b365"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Tucker McClure <tucker@gradient.team>"]
 
 [workspace]
